@@ -6,7 +6,7 @@ import re
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import QIODeviceBase, Qt, QTimer
+from PyQt6.QtCore import QIODeviceBase, QLibraryInfo, QLocale, Qt, QTimer, QTranslator
 from PyQt6.QtGui import QAction, QCloseEvent, QColor, QFont, QKeySequence, QPainter, QPen
 from PyQt6.QtSerialPort import QSerialPort, QSerialPortInfo
 from PyQt6.QtWidgets import (
@@ -39,6 +39,7 @@ from PyQt6.QtWidgets import (
 from . import __version__
 from .gcode import RasterSettings, image_to_gcode, parse_motion_segments
 from .grbl import GCodeStreamer, GrblLineBuffer, GrblStatus, StreamState, parse_status_report
+from .i18n import current_language, detect_language, set_language, tr, tr_message
 
 
 class PreviewView(QGraphicsView):
@@ -104,7 +105,7 @@ class LaserControllerWindow(QMainWindow):
         title_layout.setSpacing(2)
         title = QLabel("LaserGRBL for macOS")
         title.setObjectName("appTitle")
-        subtitle = QLabel("A focused GRBL workspace for makers, engravers, and CNC builders.")
+        subtitle = QLabel(tr("A focused GRBL workspace for makers, engravers, and CNC builders."))
         subtitle.setObjectName("appSubtitle")
         title_layout.addWidget(title)
         title_layout.addWidget(subtitle)
@@ -116,7 +117,7 @@ class LaserControllerWindow(QMainWindow):
         self.status_chip.setAlignment(Qt.AlignmentFlag.AlignCenter)
         header_layout.addWidget(self.status_chip)
 
-        self.emergency_button = QPushButton("STOP / RESET")
+        self.emergency_button = QPushButton(tr("STOP / RESET"))
         self.emergency_button.setObjectName("dangerButton")
         self.emergency_button.clicked.connect(lambda: self.abort_job(confirm=False))
         header_layout.addWidget(self.emergency_button)
@@ -130,7 +131,7 @@ class LaserControllerWindow(QMainWindow):
         root_layout.addWidget(splitter, 1)
 
         self.setCentralWidget(root)
-        self.statusBar().showMessage("Ready")
+        self.statusBar().showMessage(tr("Ready"))
         self._build_menu()
 
     def _build_control_panel(self) -> QScrollArea:
@@ -154,33 +155,33 @@ class LaserControllerWindow(QMainWindow):
         return scroll
 
     def _build_connection_card(self) -> QGroupBox:
-        group = QGroupBox("Connection")
+        group = QGroupBox(tr("Connection"))
         layout = QVBoxLayout(group)
         row = QHBoxLayout()
         self.port_combo = QComboBox()
-        self.refresh_button = QPushButton("Refresh")
+        self.refresh_button = QPushButton(tr("Refresh"))
         self.refresh_button.clicked.connect(self.populate_ports)
         row.addWidget(self.port_combo, 1)
         row.addWidget(self.refresh_button)
         layout.addLayout(row)
 
-        self.connect_button = QPushButton("Connect at 115200 baud")
+        self.connect_button = QPushButton(tr("Connect at 115200 baud"))
         self.connect_button.setObjectName("primaryButton")
         self.connect_button.clicked.connect(self.toggle_connection)
         layout.addWidget(self.connect_button)
 
-        self.machine_state_label = QLabel("Machine state: Disconnected")
-        self.position_label = QLabel("Work position  X 0.000   Y 0.000   Z 0.000")
+        self.machine_state_label = QLabel(tr("Machine state: {state}", state=tr("Disconnected")))
+        self.position_label = QLabel(tr("Work position  X {x:.3f}   Y {y:.3f}   Z {z:.3f}", x=0.0, y=0.0, z=0.0))
         self.position_label.setObjectName("coordinateLabel")
         layout.addWidget(self.machine_state_label)
         layout.addWidget(self.position_label)
         return group
 
     def _build_motion_card(self) -> QGroupBox:
-        group = QGroupBox("Motion")
+        group = QGroupBox(tr("Motion"))
         layout = QVBoxLayout(group)
         step_row = QHBoxLayout()
-        step_row.addWidget(QLabel("Jog step"))
+        step_row.addWidget(QLabel(tr("Jog step")))
         self.jog_step = QDoubleSpinBox()
         self.jog_step.setRange(0.01, 1_000)
         self.jog_step.setDecimals(2)
@@ -192,7 +193,7 @@ class LaserControllerWindow(QMainWindow):
         grid = QGridLayout()
         self.y_plus_button = QPushButton("Y+")
         self.x_minus_button = QPushButton("X−")
-        self.home_button = QPushButton("Home")
+        self.home_button = QPushButton(tr("Home"))
         self.x_plus_button = QPushButton("X+")
         self.y_minus_button = QPushButton("Y−")
         self.z_plus_button = QPushButton("Z+")
@@ -215,8 +216,8 @@ class LaserControllerWindow(QMainWindow):
         self.home_button.clicked.connect(lambda: self.send_command("$H"))
 
         action_row = QHBoxLayout()
-        self.unlock_button = QPushButton("Unlock")
-        self.zero_button = QPushButton("Set work zero")
+        self.unlock_button = QPushButton(tr("Unlock"))
+        self.zero_button = QPushButton(tr("Set work zero"))
         self.unlock_button.clicked.connect(lambda: self.send_command("$X"))
         self.zero_button.clicked.connect(self.set_work_zero)
         action_row.addWidget(self.unlock_button)
@@ -238,11 +239,11 @@ class LaserControllerWindow(QMainWindow):
         return group
 
     def _build_laser_card(self) -> QGroupBox:
-        group = QGroupBox("Laser and feed")
+        group = QGroupBox(tr("Laser and feed"))
         layout = QVBoxLayout(group)
 
         power_row = QHBoxLayout()
-        power_row.addWidget(QLabel("Maximum power"))
+        power_row.addWidget(QLabel(tr("Maximum power")))
         self.power_slider = QSlider(Qt.Orientation.Horizontal)
         self.power_slider.setRange(1, 1_000)
         self.power_slider.setValue(500)
@@ -253,7 +254,7 @@ class LaserControllerWindow(QMainWindow):
         layout.addLayout(power_row)
 
         feed_row = QHBoxLayout()
-        feed_row.addWidget(QLabel("Feed rate"))
+        feed_row.addWidget(QLabel(tr("Feed rate")))
         self.feed_rate = QSpinBox()
         self.feed_rate.setRange(1, 100_000)
         self.feed_rate.setValue(1_000)
@@ -261,10 +262,10 @@ class LaserControllerWindow(QMainWindow):
         feed_row.addWidget(self.feed_rate, 1)
         layout.addLayout(feed_row)
 
-        self.test_enable = QCheckBox("Enable low-power test control")
+        self.test_enable = QCheckBox(tr("Enable low-power test control"))
         self.test_enable.toggled.connect(self._update_controls)
         layout.addWidget(self.test_enable)
-        self.test_button = QPushButton("Hold for 1% laser test")
+        self.test_button = QPushButton(tr("Hold for 1% laser test"))
         self.test_button.setObjectName("warningButton")
         self.test_button.pressed.connect(self.start_laser_test)
         self.test_button.released.connect(self.stop_laser_test)
@@ -272,18 +273,18 @@ class LaserControllerWindow(QMainWindow):
         return group
 
     def _build_artwork_card(self) -> QGroupBox:
-        group = QGroupBox("Artwork and G-code")
+        group = QGroupBox(tr("Artwork and G-code"))
         layout = QVBoxLayout(group)
         file_row = QHBoxLayout()
-        self.image_button = QPushButton("Open image")
-        self.gcode_open_button = QPushButton("Open G-code")
+        self.image_button = QPushButton(tr("Open image"))
+        self.gcode_open_button = QPushButton(tr("Open G-code"))
         self.image_button.clicked.connect(self.select_image)
         self.gcode_open_button.clicked.connect(self.open_gcode)
         file_row.addWidget(self.image_button)
         file_row.addWidget(self.gcode_open_button)
         layout.addLayout(file_row)
 
-        self.selected_file_label = QLabel("No artwork selected")
+        self.selected_file_label = QLabel(tr("No artwork selected"))
         self.selected_file_label.setWordWrap(True)
         layout.addWidget(self.selected_file_label)
 
@@ -302,21 +303,21 @@ class LaserControllerWindow(QMainWindow):
         self.threshold_input = QSpinBox()
         self.threshold_input.setRange(0, 255)
         self.threshold_input.setValue(220)
-        settings.addWidget(QLabel("Width"), 0, 0)
+        settings.addWidget(QLabel(tr("Width")), 0, 0)
         settings.addWidget(self.width_input, 0, 1)
-        settings.addWidget(QLabel("Height"), 1, 0)
+        settings.addWidget(QLabel(tr("Height")), 1, 0)
         settings.addWidget(self.height_input, 1, 1)
-        settings.addWidget(QLabel("Resolution"), 0, 2)
+        settings.addWidget(QLabel(tr("Resolution")), 0, 2)
         settings.addWidget(self.resolution_input, 0, 3)
-        settings.addWidget(QLabel("Threshold"), 1, 2)
+        settings.addWidget(QLabel(tr("Threshold")), 1, 2)
         settings.addWidget(self.threshold_input, 1, 3)
         layout.addLayout(settings)
 
         action_row = QHBoxLayout()
-        self.generate_button = QPushButton("Generate G-code")
+        self.generate_button = QPushButton(tr("Generate G-code"))
         self.generate_button.setObjectName("primaryButton")
         self.generate_button.clicked.connect(self.generate_gcode)
-        self.save_button = QPushButton("Save")
+        self.save_button = QPushButton(tr("Save"))
         self.save_button.clicked.connect(self.save_gcode)
         action_row.addWidget(self.generate_button, 1)
         action_row.addWidget(self.save_button)
@@ -324,19 +325,19 @@ class LaserControllerWindow(QMainWindow):
         return group
 
     def _build_job_card(self) -> QGroupBox:
-        group = QGroupBox("Job")
+        group = QGroupBox(tr("Job"))
         layout = QVBoxLayout(group)
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
-        self.job_detail_label = QLabel("No active job")
+        self.job_detail_label = QLabel(tr("No active job"))
         layout.addWidget(self.progress_bar)
         layout.addWidget(self.job_detail_label)
 
         row = QHBoxLayout()
-        self.start_button = QPushButton("Start job")
+        self.start_button = QPushButton(tr("Start job"))
         self.start_button.setObjectName("primaryButton")
-        self.pause_button = QPushButton("Pause")
-        self.abort_button = QPushButton("Abort")
+        self.pause_button = QPushButton(tr("Pause"))
+        self.abort_button = QPushButton(tr("Abort"))
         self.abort_button.setObjectName("dangerButton")
         self.start_button.clicked.connect(self.start_job)
         self.pause_button.clicked.connect(self.toggle_pause)
@@ -359,63 +360,63 @@ class LaserControllerWindow(QMainWindow):
         self.preview_view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.preview_view.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         preview_layout.addWidget(self.preview_view)
-        fit_button = QPushButton("Fit preview")
+        fit_button = QPushButton(tr("Fit preview"))
         fit_button.clicked.connect(self.fit_preview)
         preview_layout.addWidget(fit_button, alignment=Qt.AlignmentFlag.AlignRight)
-        tabs.addTab(preview_container, "Path preview")
+        tabs.addTab(preview_container, tr("Path preview"))
 
         self.gcode_editor = QTextEdit()
         self.gcode_editor.setAcceptRichText(False)
         self.gcode_editor.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
-        self.gcode_editor.setPlaceholderText("Open, generate, or paste G-code here.")
+        self.gcode_editor.setPlaceholderText(tr("Open, generate, or paste G-code here."))
         self.gcode_editor.setFont(QFont("Menlo", 11))
         self.gcode_editor.textChanged.connect(lambda: self.preview_timer.start())
         self.gcode_editor.textChanged.connect(self._update_controls)
-        tabs.addTab(self.gcode_editor, "G-code")
+        tabs.addTab(self.gcode_editor, tr("G-code"))
 
         self.console = QTextEdit()
         self.console.setReadOnly(True)
         self.console.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
         self.console.setObjectName("console")
         self.console.setFont(QFont("Menlo", 10))
-        tabs.addTab(self.console, "Console")
+        tabs.addTab(self.console, tr("Console"))
         self.workspace_tabs = tabs
         return tabs
 
     def _build_menu(self) -> None:
-        file_menu = self.menuBar().addMenu("File")
-        open_image_action = QAction("Open Image…", self)
+        file_menu = self.menuBar().addMenu(tr("File"))
+        open_image_action = QAction(tr("Open Image…"), self)
         open_image_action.setShortcut(QKeySequence("Ctrl+Shift+O"))
         open_image_action.triggered.connect(self.select_image)
         file_menu.addAction(open_image_action)
-        open_gcode_action = QAction("Open G-code…", self)
+        open_gcode_action = QAction(tr("Open G-code…"), self)
         open_gcode_action.setShortcut(QKeySequence.StandardKey.Open)
         open_gcode_action.triggered.connect(self.open_gcode)
         file_menu.addAction(open_gcode_action)
-        save_action = QAction("Save G-code…", self)
+        save_action = QAction(tr("Save G-code…"), self)
         save_action.setShortcut(QKeySequence.StandardKey.Save)
         save_action.triggered.connect(self.save_gcode)
         file_menu.addAction(save_action)
         file_menu.addSeparator()
-        quit_action = QAction("Quit", self)
+        quit_action = QAction(tr("Quit"), self)
         quit_action.setShortcut(QKeySequence.StandardKey.Quit)
         quit_action.triggered.connect(self.close)
         file_menu.addAction(quit_action)
 
-        machine_menu = self.menuBar().addMenu("Machine")
-        machine_menu.addAction("Refresh Ports", self.populate_ports)
-        machine_menu.addAction("Request Settings ($$)", lambda: self.send_command("$$"))
-        machine_menu.addAction("Request Parser State ($G)", lambda: self.send_command("$G"))
-        machine_menu.addAction("Soft Reset", lambda: self.send_realtime(b"\x18"))
+        machine_menu = self.menuBar().addMenu(tr("Machine"))
+        machine_menu.addAction(tr("Refresh Ports"), self.populate_ports)
+        machine_menu.addAction(tr("Request Settings ($$)"), lambda: self.send_command("$$"))
+        machine_menu.addAction(tr("Request Parser State ($G)"), lambda: self.send_command("$G"))
+        machine_menu.addAction(tr("Soft Reset"), lambda: self.send_realtime(b"\x18"))
 
-        help_menu = self.menuBar().addMenu("Help")
-        help_menu.addAction("Laser Safety", self.show_safety)
-        help_menu.addAction("About", self.show_about)
+        help_menu = self.menuBar().addMenu(tr("Help"))
+        help_menu.addAction(tr("Laser Safety"), self.show_safety)
+        help_menu.addAction(tr("About"), self.show_about)
 
     def _apply_theme(self) -> None:
         self.setStyleSheet(
             """
-            QWidget { background: #11151c; color: #e7edf5; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text'; font-size: 13px; }
+            QWidget { background: #11151c; color: #e7edf5; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Hiragino Sans'; font-size: 13px; }
             QMenuBar { background: #11151c; padding: 4px; }
             QMenuBar::item:selected, QMenu::item:selected { background: #2a3442; border-radius: 4px; }
             QMenu { background: #1a202a; border: 1px solid #344052; padding: 6px; }
@@ -453,16 +454,16 @@ class LaserControllerWindow(QMainWindow):
         current = self.port_combo.currentData()
         self.port_combo.clear()
         if self.demo_mode:
-            self.port_combo.addItem("Demo controller (no hardware)", "__demo__")
+            self.port_combo.addItem(tr("Demo controller (no hardware)"), "__demo__")
         for port in sorted(QSerialPortInfo.availablePorts(), key=lambda item: item.portName()):
-            description = port.description() or "Serial device"
+            description = port.description() or tr("Serial device")
             self.port_combo.addItem(f"{port.portName()} — {description}", port.portName())
         if current is not None:
             index = self.port_combo.findData(current)
             if index >= 0:
                 self.port_combo.setCurrentIndex(index)
         if self.port_combo.count() == 0:
-            self.port_combo.addItem("No serial ports found", None)
+            self.port_combo.addItem(tr("No serial ports found"), None)
         self._update_controls()
 
     def toggle_connection(self) -> None:
@@ -477,7 +478,7 @@ class LaserControllerWindow(QMainWindow):
     def connect_serial(self) -> None:
         port_name = self.port_combo.currentData()
         if not port_name:
-            QMessageBox.warning(self, "Connection", "Select a serial port first.")
+            QMessageBox.warning(self, tr("Connection"), tr("Select a serial port first."))
             return
 
         self.serial_port.setPortName(port_name)
@@ -488,13 +489,13 @@ class LaserControllerWindow(QMainWindow):
         self.serial_port.setFlowControl(QSerialPort.FlowControl.NoFlowControl)
 
         if not self.serial_port.open(QIODeviceBase.OpenModeFlag.ReadWrite):
-            QMessageBox.critical(self, "Connection failed", self.serial_port.errorString())
+            QMessageBox.critical(self, tr("Connection failed"), self.serial_port.errorString())
             return
 
         self.connecting = True
         self.line_buffer.clear()
-        self._set_status("Detecting", "Detecting GRBL controller…")
-        self._log("INFO", f"Opened {port_name} at 115200 baud", "#8fc7ff")
+        self._set_status("Detecting", tr("Detecting GRBL controller…"))
+        self._log("INFO", tr("Opened {port} at 115200 baud", port=port_name), "#8fc7ff")
         self.serial_port.write(b"\r\n\x18")
         QTimer.singleShot(1_200, self.request_status)
         self.detection_timer.start(3_000)
@@ -503,7 +504,7 @@ class LaserControllerWindow(QMainWindow):
     def _connect_demo(self) -> None:
         self.connected = True
         self.connecting = False
-        self._log("INFO", "Demo controller connected", "#8fc7ff")
+        self._log("INFO", tr("Demo controller connected"), "#8fc7ff")
         self._apply_status(GrblStatus(raw="", state="Idle", work_position=(0.0, 0.0, 0.0)))
         self.status_timer.start()
         self._set_connected(True)
@@ -520,9 +521,9 @@ class LaserControllerWindow(QMainWindow):
         self.connected = False
         self.connecting = False
         self.status_report = GrblStatus(raw="", state="Disconnected")
-        self._set_status("Disconnected", "Machine state: Disconnected")
+        self._set_status("Disconnected", tr("Machine state: {state}", state=tr("Disconnected")))
         self._set_connected(False)
-        self._log("INFO", "Controller disconnected", "#8fc7ff")
+        self._log("INFO", tr("Controller disconnected"), "#8fc7ff")
 
     def _read_serial_data(self) -> None:
         chunk = bytes(self.serial_port.readAll())
@@ -558,7 +559,7 @@ class LaserControllerWindow(QMainWindow):
             self.send_realtime(b"!")
             self.job_timer.stop()
             self._update_controls()
-            QMessageBox.critical(self, "Job stopped", f"GRBL reported: {line}")
+            QMessageBox.critical(self, tr("Job stopped"), tr("GRBL reported: {line}", line=line))
 
     def _complete_connection(self) -> None:
         if self.connected:
@@ -569,20 +570,20 @@ class LaserControllerWindow(QMainWindow):
         self.status_timer.start()
         self._set_connected(True)
         self.send_command("$G")
-        self.statusBar().showMessage("GRBL controller connected", 4_000)
+        self.statusBar().showMessage(tr("GRBL controller connected"), 4_000)
 
     def _detection_failed(self) -> None:
         if not self.connecting:
             return
-        error = "A serial device opened, but it did not identify itself as GRBL."
+        error = tr("A serial device opened, but it did not identify itself as GRBL.")
         self.disconnect_serial()
-        QMessageBox.critical(self, "GRBL not detected", error)
+        QMessageBox.critical(self, tr("GRBL not detected"), error)
 
     def _serial_error(self, error: QSerialPort.SerialPortError) -> None:
         if error == QSerialPort.SerialPortError.ResourceError and self.serial_port.isOpen():
             message = self.serial_port.errorString()
             self.disconnect_serial()
-            QMessageBox.critical(self, "Serial connection lost", message)
+            QMessageBox.critical(self, tr("Serial connection lost"), message)
 
     def request_status(self) -> None:
         if self.demo_mode and self.connected:
@@ -607,10 +608,12 @@ class LaserControllerWindow(QMainWindow):
 
     def send_command(self, command: str, from_stream: bool = False) -> bool:
         if not self.connected:
-            QMessageBox.warning(self, "Not connected", "Connect to a GRBL controller first.")
+            QMessageBox.warning(self, tr("Not connected"), tr("Connect to a GRBL controller first."))
             return False
         if self.streamer.is_active and not from_stream:
-            QMessageBox.warning(self, "Job active", "Pause or abort the current job before sending manual commands.")
+            QMessageBox.warning(
+                self, tr("Job active"), tr("Pause or abort the current job before sending manual commands.")
+            )
             return False
         self._log("TX", command, "#f7d477")
         if self.demo_mode:
@@ -618,7 +621,7 @@ class LaserControllerWindow(QMainWindow):
             return True
         written = self.serial_port.write(f"{command}\n".encode())
         if written < 0:
-            QMessageBox.critical(self, "Send failed", self.serial_port.errorString())
+            QMessageBox.critical(self, tr("Send failed"), self.serial_port.errorString())
             return False
         return True
 
@@ -648,14 +651,14 @@ class LaserControllerWindow(QMainWindow):
         if report.work_position is not None:
             self.current_position = report.work_position
             x, y, z = report.work_position
-            self.position_label.setText(f"Work position  X {x:.3f}   Y {y:.3f}   Z {z:.3f}")
+            self.position_label.setText(tr("Work position  X {x:.3f}   Y {y:.3f}   Z {z:.3f}", x=x, y=y, z=z))
             self._update_position_marker()
-        self.machine_state_label.setText(f"Machine state: {report.state}")
+        self.machine_state_label.setText(tr("Machine state: {state}", state=report.state))
         self._set_status(report.state, self.machine_state_label.text())
         self._update_controls()
 
     def _set_status(self, state: str, message: str) -> None:
-        self.status_chip.setText(state.upper())
+        self.status_chip.setText(tr(state).upper())
         colors = {
             "Idle": ("#173c2e", "#7ce0ad"),
             "Run": ("#15344a", "#77cfff"),
@@ -672,7 +675,7 @@ class LaserControllerWindow(QMainWindow):
         self.statusBar().showMessage(message)
 
     def _set_connected(self, connected: bool) -> None:
-        self.connect_button.setText("Disconnect" if connected else "Connect at 115200 baud")
+        self.connect_button.setText(tr("Disconnect") if connected else tr("Connect at 115200 baud"))
         self._update_controls()
 
     def _update_controls(self) -> None:
@@ -696,7 +699,7 @@ class LaserControllerWindow(QMainWindow):
         self.save_button.setEnabled(bool(self.gcode_editor.toPlainText().strip()) and not busy)
         self.test_button.setEnabled(self.connected and not busy and self.test_enable.isChecked())
         self.test_enable.setEnabled(self.connected and not busy)
-        self.pause_button.setText("Resume" if self.streamer.state == StreamState.PAUSED else "Pause")
+        self.pause_button.setText(tr("Resume") if self.streamer.state == StreamState.PAUSED else tr("Pause"))
 
     def jog(self, x: float = 0.0, y: float = 0.0, z: float = 0.0) -> None:
         axes = " ".join(f"{axis}{value:.3f}" for axis, value in (("X", x), ("Y", y), ("Z", z)) if value != 0)
@@ -705,8 +708,8 @@ class LaserControllerWindow(QMainWindow):
     def set_work_zero(self) -> None:
         answer = QMessageBox.question(
             self,
-            "Set work zero",
-            "Set the current position as X0 Y0 Z0 in the active work coordinate system?",
+            tr("Set work zero"),
+            tr("Set the current position as X0 Y0 Z0 in the active work coordinate system?"),
         )
         if answer == QMessageBox.StandardButton.Yes:
             self.send_command("G10 L20 P1 X0 Y0 Z0")
@@ -722,9 +725,9 @@ class LaserControllerWindow(QMainWindow):
     def select_image(self) -> None:
         filename, _ = QFileDialog.getOpenFileName(
             self,
-            "Open artwork",
+            tr("Open artwork"),
             "",
-            "Images (*.png *.jpg *.jpeg *.bmp *.tif *.tiff)",
+            tr("Images (*.png *.jpg *.jpeg *.bmp *.tif *.tiff)"),
         )
         if not filename:
             return
@@ -747,25 +750,25 @@ class LaserControllerWindow(QMainWindow):
         try:
             commands = image_to_gcode(self.image_path, settings)
         except (OSError, ValueError) as error:
-            QMessageBox.critical(self, "G-code generation failed", str(error))
+            QMessageBox.critical(self, tr("G-code generation failed"), tr_message(str(error)))
             return
         finally:
             QApplication.restoreOverrideCursor()
         self.gcode_editor.setPlainText("\n".join(commands))
         self.workspace_tabs.setCurrentWidget(self.gcode_editor)
         self.render_preview()
-        self.statusBar().showMessage(f"Generated {len(commands):,} G-code lines", 5_000)
+        self.statusBar().showMessage(tr("Generated {count:,} G-code lines", count=len(commands)), 5_000)
 
     def open_gcode(self) -> None:
         filename, _ = QFileDialog.getOpenFileName(
-            self, "Open G-code", "", "G-code (*.gcode *.nc *.tap *.txt);;All files (*)"
+            self, tr("Open G-code"), "", tr("G-code (*.gcode *.nc *.tap *.txt);;All files (*)")
         )
         if not filename:
             return
         try:
             content = Path(filename).read_text(encoding="utf-8")
         except (OSError, UnicodeError) as error:
-            QMessageBox.critical(self, "Open failed", str(error))
+            QMessageBox.critical(self, tr("Open failed"), str(error))
             return
         self.gcode_editor.setPlainText(content)
         self.selected_file_label.setText(Path(filename).name)
@@ -774,13 +777,15 @@ class LaserControllerWindow(QMainWindow):
     def save_gcode(self) -> None:
         if not self.gcode_editor.toPlainText().strip():
             return
-        filename, _ = QFileDialog.getSaveFileName(self, "Save G-code", "job.gcode", "G-code (*.gcode);;Text (*.txt)")
+        filename, _ = QFileDialog.getSaveFileName(
+            self, tr("Save G-code"), "job.gcode", tr("G-code (*.gcode);;Text (*.txt)")
+        )
         if not filename:
             return
         try:
             Path(filename).write_text(self.gcode_editor.toPlainText(), encoding="utf-8")
         except OSError as error:
-            QMessageBox.critical(self, "Save failed", str(error))
+            QMessageBox.critical(self, tr("Save failed"), str(error))
 
     def render_preview(self) -> None:
         self.preview_scene.clear()
@@ -822,7 +827,9 @@ class LaserControllerWindow(QMainWindow):
         self._update_position_marker()
         self.fit_preview()
         self.statusBar().showMessage(
-            f"Previewed {len(segments):,} motion segments" + (f" at 1:{stride} detail" if stride > 1 else ""),
+            tr("Previewed {count:,} motion segments at 1:{stride} detail", count=len(segments), stride=stride)
+            if stride > 1
+            else tr("Previewed {count:,} motion segments", count=len(segments)),
             4_000,
         )
 
@@ -869,16 +876,17 @@ class LaserControllerWindow(QMainWindow):
         try:
             total = self.streamer.load(self.gcode_editor.toPlainText())
         except RuntimeError as error:
-            QMessageBox.warning(self, "Job", str(error))
+            QMessageBox.warning(self, tr("Job"), tr_message(str(error)))
             return
         if total == 0:
-            QMessageBox.warning(self, "Job", "No executable G-code was found.")
+            QMessageBox.warning(self, tr("Job"), tr("No executable G-code was found."))
             return
         answer = QMessageBox.question(
             self,
-            "Start laser job",
-            f"Stream {total:,} commands to the connected controller?\n\n"
-            "Confirm ventilation, eye protection, focus, and a clear machine area before continuing.",
+            tr("Start laser job"),
+            tr("Stream {total:,} commands to the connected controller?", total=total)
+            + "\n\n"
+            + tr("Confirm ventilation, eye protection, focus, and a clear machine area before continuing."),
         )
         if answer != QMessageBox.StandardButton.Yes:
             return
@@ -887,7 +895,7 @@ class LaserControllerWindow(QMainWindow):
         self.job_timer.start()
         self._update_controls()
         self.workspace_tabs.setCurrentWidget(self.console)
-        self._log("JOB", f"Started {total:,}-line job", "#f0a46c")
+        self._log("JOB", tr("Started {total:,}-line job", total=total), "#f0a46c")
         self._send_next_job_line()
 
     def _send_next_job_line(self) -> None:
@@ -895,7 +903,7 @@ class LaserControllerWindow(QMainWindow):
         if command is None:
             return
         if not self.send_command(command.text, from_stream=True):
-            self.streamer.fail("Serial write failed.")
+            self.streamer.fail(tr("Serial write failed."))
             self.job_timer.stop()
             self._update_controls()
 
@@ -903,11 +911,11 @@ class LaserControllerWindow(QMainWindow):
         if self.streamer.state == StreamState.RUNNING:
             self.send_realtime(b"!")
             self.streamer.pause()
-            self._log("JOB", "Feed hold requested", "#f0ce7a")
+            self._log("JOB", tr("Feed hold requested"), "#f0ce7a")
         elif self.streamer.state == StreamState.PAUSED:
             self.send_realtime(b"~")
             self.streamer.resume()
-            self._log("JOB", "Cycle resume requested", "#74dfaa")
+            self._log("JOB", tr("Cycle resume requested"), "#74dfaa")
             if self.streamer.in_flight is None:
                 self._send_next_job_line()
         self._update_controls()
@@ -919,8 +927,8 @@ class LaserControllerWindow(QMainWindow):
         if confirm:
             answer = QMessageBox.question(
                 self,
-                "Abort job",
-                "Immediately issue feed hold and a GRBL soft reset?",
+                tr("Abort job"),
+                tr("Immediately issue feed hold and a GRBL soft reset?"),
             )
             if answer != QMessageBox.StandardButton.Yes:
                 return
@@ -929,27 +937,34 @@ class LaserControllerWindow(QMainWindow):
         self.streamer.cancel()
         self.job_timer.stop()
         self.progress_bar.setValue(0)
-        self.job_detail_label.setText("Job aborted")
-        self._log("JOB", "Job aborted with feed hold and soft reset", "#ff8993")
+        self.job_detail_label.setText(tr("Job aborted"))
+        self._log("JOB", tr("Job aborted with feed hold and soft reset"), "#ff8993")
         self._update_controls()
 
     def _update_job_progress(self) -> None:
         progress = round(self.streamer.progress * 100)
         self.progress_bar.setValue(progress)
         remaining = self.streamer.estimated_remaining
-        remaining_text = "calculating" if remaining is None else self._format_duration(remaining)
+        remaining_text = tr("calculating") if remaining is None else self._format_duration(remaining)
         self.job_detail_label.setText(
-            f"{self.streamer.acknowledged:,} / {self.streamer.total:,} commands · {remaining_text} remaining"
+            tr(
+                "{done:,} / {total:,} commands · {remaining} remaining",
+                done=self.streamer.acknowledged,
+                total=self.streamer.total,
+                remaining=remaining_text,
+            )
         )
 
     def _complete_job(self) -> None:
         self.job_timer.stop()
         self.progress_bar.setValue(100)
         duration = self._format_duration(self.streamer.elapsed)
-        self.job_detail_label.setText(f"Completed in {duration}")
-        self._log("JOB", f"Completed in {duration}", "#74dfaa")
+        self.job_detail_label.setText(tr("Completed in {duration}", duration=duration))
+        self._log("JOB", tr("Completed in {duration}", duration=duration), "#74dfaa")
         self._update_controls()
-        QMessageBox.information(self, "Job complete", f"All G-code commands were acknowledged in {duration}.")
+        QMessageBox.information(
+            self, tr("Job complete"), tr("All G-code commands were acknowledged in {duration}.", duration=duration)
+        )
 
     @staticmethod
     def _format_duration(seconds: float) -> str:
@@ -983,23 +998,25 @@ G0 X0 Y0
     def show_safety(self) -> None:
         QMessageBox.warning(
             self,
-            "Laser safety",
-            "Never operate a laser unattended. Use wavelength-rated eye protection, effective ventilation, "
-            "a fire-resistant enclosure, and a physical emergency stop. Test with minimum power first. "
-            "Software controls are not a substitute for hardware safety systems.",
+            tr("Laser safety"),
+            tr(
+                "Never operate a laser unattended. Use wavelength-rated eye protection, effective ventilation, "
+                "a fire-resistant enclosure, and a physical emergency stop. Test with minimum power first. "
+                "Software controls are not a substitute for hardware safety systems."
+            ),
         )
 
     def show_about(self) -> None:
         QMessageBox.about(
             self,
-            "About LaserGRBL for macOS",
+            tr("About LaserGRBL for macOS"),
             f"LaserGRBL for macOS {__version__}\n\n"
-            "An open-source desktop controller for GRBL-compatible laser engravers and CNC machines.",
+            + tr("An open-source desktop controller for GRBL-compatible laser engravers and CNC machines."),
         )
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
         if self.streamer.is_active:
-            answer = QMessageBox.question(self, "Active job", "Abort the active job and quit?")
+            answer = QMessageBox.question(self, tr("Active job"), tr("Abort the active job and quit?"))
             if answer != QMessageBox.StandardButton.Yes:
                 event.ignore()
                 return
@@ -1009,8 +1026,22 @@ G0 X0 Y0
         event.accept()
 
 
-def run(demo_mode: bool = False) -> int:
+def _install_language(application: QApplication, language: str | None) -> None:
+    """Choose the interface language and load Qt's own translations (standard buttons, dialogs)."""
+    if language is None:
+        language = detect_language(QLocale.system().uiLanguages())
+    set_language(language)
+    if current_language() == "en":
+        return
+    translations = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
+    translator = QTranslator(application)
+    if translator.load(f"qtbase_{current_language()}", translations):
+        application.installTranslator(translator)
+
+
+def run(demo_mode: bool = False, language: str | None = None) -> int:
     application = QApplication.instance() or QApplication(sys.argv)
+    _install_language(application, language)
     application.setApplicationName("LaserGRBL for macOS")
     application.setApplicationVersion(__version__)
     application.setOrganizationName("LaserGRBL MacOS Controller")

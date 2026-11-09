@@ -95,6 +95,17 @@ lasergrbl-macos --demo
 
 Demo mode provides a simulated GRBL connection, movement updates, acknowledgements, and a sample calibration frame. It never opens a serial port.
 
+### Interface language
+
+The interface follows the macOS language setting and currently supports English and Japanese (日本語). To choose a language explicitly:
+
+```bash
+lasergrbl-macos --lang ja
+LASERGRBL_LANG=en lasergrbl-macos
+```
+
+GRBL state names (`Idle`, `Run`, `Alarm` …), G-code words, and `$` commands stay in English so they match controller output and GRBL documentation. Translations live in `src/lasergrbl_macos/i18n.py`; `tests/test_i18n.py` fails when an interface string has no translation.
+
 ## First job
 
 1. Power the controller and connect it to the Mac over USB.
